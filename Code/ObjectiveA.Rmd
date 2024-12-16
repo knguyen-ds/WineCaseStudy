@@ -1,0 +1,455 @@
+---
+title: "Wine Case Study"
+output:
+  word_document: default
+  html_notebook: default
+---
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+trainData <- read.csv("/Users/katie/Documents/MSDS/Doing Data Science/Unit 14/Wine Train.csv")
+```
+
+```{r}
+#Clean Data: includes what to do if there was missing data
+#Current dataset has no missing variables
+expVarTrain <- setdiff(names(trainData), c("ID", "quality"))
+
+trainData[expVarTrain] <- lapply(trainData[expVarTrain], function(x){
+  if(is.numeric(x)){
+    replace(x,is.na(x), mean(x, na.rm=TRUE))
+  } else {
+    x
+  }
+})
+
+# Generate a new ID for rows with missing ID
+maxIDTrain <- max(trainData$ID, na.rm=TRUE)
+trainData$ID[is.na(trainData$ID)] <- maxIDTrain + 1:sum(is.na(trainData$ID))
+
+#If there are missing values in quality, remove them from the training dataset
+wineTrain <- trainData %>%
+  filter(!is.na(quality))
+
+sum(is.na(wineTrain)) #Counts how many missing values are left
+head(wineTrain)
+```
+
+```{r}
+testData <- read.csv("/Users/katie/Documents/MSDS/Doing Data Science/Unit 14/Wine Test Set.csv")
+
+expVarTest <- setdiff(names(testData), c("ID", "quality"))
+
+testData[expVarTest] <- lapply(testData[expVarTest], function(x){
+  if(is.numeric(x)){
+    replace(x,is.na(x), mean(x, na.rm=TRUE))
+  } else {
+    x
+  }
+})
+
+# Generate a new ID for rows with missing ID
+maxIDTest <- max(testData$ID, na.rm=TRUE)
+testData$ID[is.na(testData$ID)] <- maxIDTest + 1:sum(is.na(testData$ID))
+
+wineTest <- testData
+
+head(wineTest)
+sum(is.na(wineTest)) #Counts how many missing values are left
+head(wineTest)
+```
+
+```{r}
+par(mfrow = c(1, 2))
+
+#plotMe <- c("fixed.acidity", "volatile.acidity", "residual.sugar", "pH", "alcohol", "quality")
+plotMe <- setdiff(names(trainData), c("ID"))
+
+for (i in 1:length(plotMe)) {
+   data <- wineTrain[[plotMe[i]]]
+  
+  # Create histogram
+  hist(data, 
+       main = paste(plotMe[i]),
+       xlab = plotMe[i],
+       col = "darkred", 
+       border = "black", 
+       prob = TRUE)  # `prob = TRUE` to show the density instead of counts
+  
+  # Add the normal curve
+  curve(dnorm(x, mean = mean(data, na.rm = TRUE), sd = sd(data, na.rm = TRUE)),
+        add = TRUE, col = "gray", lwd = 2)
+}
+  
+```
+
+```{r}
+#Visualize to see if outliers need to be removed
+par(mfrow = c(1,2))
+
+for (var in expVarTrain) {
+  plot(wineTrain[[var]], wineTrain$quality,
+       main = paste(var, "vs Quality"),
+       xlab = var, ylab = "Quality",
+       pch = 19, col = "darkred")  
+}
+```
+
+```{r}
+par(mfrow = c(1, 2))
+
+wineTrain$LogFixed = log(wineTrain$fixed.acidity)
+wineTrain$LogVolatile = log(wineTrain$volatile.acidity)
+wineTrain$LogSugar = log(wineTrain$residual.sugar)
+wineTrain$LogpH = log(wineTrain$pH)
+wineTrain$LogAlc = log(wineTrain$alcohol)
+
+logTransform <- c("LogFixed", "LogVolatile", "LogSugar", "LogAlc")
+for (i in 1:length(logTransform)) {
+   data <- wineTrain[[logTransform[i]]]
+  
+  # Create histogram
+  hist(data, 
+       main = paste(logTransform[i]),
+       xlab = logTransform[i],
+       col = "plum4", 
+       border = "black", 
+       prob = TRUE)  
+  
+  # Add the normal curve
+  curve(dnorm(x, mean = mean(data, na.rm = TRUE), sd = sd(data, na.rm = TRUE)),
+        add = TRUE, col = "black", lwd = 2)
+}
+```
+# Now perform simple linear regressions for top/interesting features
+```{r}
+modelSugar <- lm(quality ~ residual.sugar, data = wineTrain)
+summary(modelSugar)
+
+modelLogSugar <- lm(quality ~ LogSugar, data = wineTrain)
+summary(modelLogSugar)
+
+```
+
+```{r}
+modelFixed <- lm(quality ~ LogFixed, data = wineTrain)
+summary(modelFixed)
+
+```
+
+```{r}
+modelVolatile <- lm(quality ~ LogVolatile, data = wineTrain)
+summary(modelVolatile)
+```
+
+```{r}
+modelpH <- lm(quality ~ pH, data = wineTrain)
+summary(modelpH)
+
+```
+
+```{r}
+modelAlc <- lm(quality ~ LogAlc, data = wineTrain)
+summary(modelAlc)
+```
+
+```{r}
+wineTrain_log <- wineTrain
+wineTrain_log[expVarTrain] <- lapply(wineTrain[expVarTrain], function(x) {
+  # Apply log transformation while handling non-positive values
+  log(x + 1e-3)  # Adding small value to handle zero or negative values
+})
+
+# Calculate correlations of the original and log-transformed variables with quality
+correlations <- data.frame(
+  Variable = c(expVarTrain),
+  CorrelationOriginal = rep(NA, length(expVarTrain)),
+  CorrelationLogTransformed = rep(NA, length(expVarTrain))
+)
+
+# Calculate correlations for original and log-transformed variables with quality
+for (i in 1:length(expVarTrain)) {
+  correlations$CorrelationOriginal[i] <- cor(wineTrain[[expVarTrain[i]]], wineTrain$quality, use = "complete.obs")
+  correlations$CorrelationLogTransformed[i] <- cor(wineTrain_log[[expVarTrain[i]]], wineTrain$quality, use = "complete.obs")
+}
+
+correlations$CorrelationDelta <- correlations$CorrelationLogTransformed - correlations$CorrelationOriginal
+correlations <- correlations[order(abs(correlations$CorrelationOriginal), decreasing = TRUE), ]
+correlations
+```
+
+```{r}
+#bar plots of alcohol, density, volatile.acidity, log(chlorides), log(citric.acid), fixed.acidity, total.sulfur.dioxide, sulphates, log(free.sulfure.dioxide)
+
+# Top 5 attributes: alcohol, density, volatile.acidity, chlorides, citric.acid, and quality
+library(dplyr)
+library(tidyr)
+# Reshape the dataset to long format for easier plotting
+wineTrainPlot <- wineTrain %>%
+  select(quality, alcohol, density, volatile.acidity, chlorides, citric.acid) %>%
+  pivot_longer(cols = c(alcohol, density, volatile.acidity, chlorides, citric.acid),
+               names_to = "Feature", values_to = "value")
+
+# Plot scatterplot with ggplot2
+ggplot(wineTrainPlot, aes(x = value, y = quality, color = Feature)) +
+  geom_point(alpha = 0.6) +  # Use alpha to make points a little transparent
+  labs(title = "Wine Features vs Quality",
+       x = "Value",
+       y = "Quality") +
+  scale_color_manual(values = c("salmon", "gold", "seagreen", "turquoise", "darkblue")) + 
+  theme_minimal()
+
+```
+
+
+
+```{r}
+library(caret)
+modelMLR <- lm(quality ~ alcohol * density * volatile.acidity * chlorides * citric.acid, data = wineTrain)
+summary(modelMLR)
+
+predictMLR <- predict(modelMLR, newdata = wineTrain)
+wineTrain$qualityMLRPrediction <- round(predictMLR)
+
+levels_quality <- levels(factor(wineTrain$quality))
+wineTrain$qualityMLRPrediction <- factor(wineTrain$qualityMLRPrediction, levels = levels_quality)
+confMatrixMLR <- confusionMatrix(factor(wineTrain$quality), wineTrain$qualityMLRPrediction)
+confMatrixMLR
+```
+
+```{r}
+confMatrixMLR_df <- as.data.frame(as.table(confMatrixMLR$table))
+
+# Plot confusion matrix as a heatmap
+ggplot(confMatrixMLR_df, aes(Prediction, Reference, fill = Freq)) +
+  geom_tile() +
+  scale_fill_gradient(low = "white", high = "blue") +
+  labs(x = "Actual Quality", y = "Predicted Quality", title = "Confusion Matrix") +
+  theme_minimal()
+
+```
+
+```{r}
+confMatrixMLR_df$Proportion <- confMatrixMLR_df$Freq / sum(confMatrixMLR_df$Freq)
+
+# Plot as a stacked bar plot
+ggplot(confMatrixMLR_df, aes(x = Reference, y = Proportion, fill = Prediction)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Actual Quality", y = "Proportion", title = "Confusion Matrix Proportions") +
+  scale_fill_brewer(palette = "Set3") +
+  theme_minimal()
+```
+
+
+```{r}
+comparison_df <- data.frame(
+  Actual = factor(wineTrain$quality),
+  Predicted = factor(wineTrain$qualityMLRPrediction)
+)
+
+# Plot the comparison using a bar plot
+ggplot(comparison_df, aes(x = Actual, fill = Predicted)) +
+  geom_bar(position = "fill") +
+  labs(x = "Actual Quality", y = "Proportion", title = "Actual vs Predicted Quality Distribution") +
+  scale_fill_brewer(palette = "Set3") +
+  theme_minimal()
+```
+
+```{r}
+wineTrain$correctPrediction <- wineTrain$qualityMLRPrediction == wineTrain$quality
+prediction_MLR <- table(wineTrain$correctPrediction)
+
+# Create a data frame for the plot
+prediction_MLRdf <- data.frame(
+  prediction = c("Correct", "Incorrect"),
+  count = c(prediction_MLR[TRUE], prediction_MLR[FALSE])
+)
+
+# Calculate the percentage of correct predictions
+total_predictions <- sum(prediction_MLR)
+correct_percentage <- (prediction_MLR[TRUE] / total_predictions) * 100
+
+# Plot the stacked bar plot
+ggplot(prediction_MLRdf, aes(x = "Predictions", y = count, fill = prediction)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("Correct" = "darkred", "Incorrect" = "beige")) +
+  geom_text(aes(label = paste0(round(count / total_predictions * 100, 2), "%")), 
+            position = position_stack(vjust = 0.5), color = "black", fontface = "bold") +
+  labs(title = "Prediction Accuracy", x = "", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+
+pie(prediction_MLR, 
+    labels = paste0(names(prediction_MLR), " (", round(prediction_MLR / sum(prediction_MLR) * 100, 1), "%)"),
+    col = c("gray", "beige"),
+    main = "Prediction Accuracy")
+```
+
+
+```{r}
+par(mfrow = c(2, 2))  # Arrange the plots in a 2x2 grid
+plot(modelMLR)
+```
+
+```{r}
+# Load the MASS package for ordinal logistic regression
+library(MASS)
+
+# Fit the ordinal logistic regression model
+modelOLR <- polr(as.factor(quality) ~ alcohol + density + volatile.acidity + chlorides + citric.acid, 
+                  data = wineTrain, method = "logistic")
+summary(modelOLR)
+
+predictOLR <- predict(modelOLR, newdata = wineTrain)
+wineTrain$qualityOLRPrediction <- predictOLR
+
+confMatOLR <- confusionMatrix(wineTrain$qualityOLRPrediction, as.factor(wineTrain$quality))
+confMatOLR
+
+#Apply model to test set and save for submission
+predictOLR_test <- predict(modelOLR, newdata = wineTest)
+wineTest$qualityOLRPrediction <- predictOLR_test
+
+write.csv(data.frame(ID = wineTest$ID, 
+                     Quality = wineTest$qualityOLRPrediction), 
+          file = "WineTestPrediction.csv", row.names = FALSE)
+```
+
+```{r}
+confMatOLR_df <- as.data.frame(as.table(confMatOLR))
+
+# Plot confusion matrix as a heatmap
+ggplot(confMatOLR_df, aes(x = Prediction, y = Reference)) +
+  geom_tile(aes(fill = Freq), color = "white") +
+  scale_fill_gradient(low = "white", high = "blue") +
+  theme_minimal() +
+  labs(x = "Predicted", y = "Actual", fill = "Frequency") +
+  ggtitle("Confusion Matrix Heatmap") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+```{r}
+comparison_OLRdf <- data.frame(
+  Actual = factor(wineTrain$quality),
+  Predicted = factor(wineTrain$qualityOLRPrediction)
+)
+
+# Plot the comparison using a bar plot
+ggplot(comparison_OLRdf, aes(x = Actual, fill = Predicted)) +
+  geom_bar(position = "fill") +
+  labs(x = "Actual Quality", y = "Proportion", title = "Actual vs Predicted Quality Distribution") +
+  scale_fill_brewer(palette = "Set3") +
+  theme_minimal()
+```
+
+```{r}
+wineTrain$correctPredictionOLR <- wineTrain$qualityOLRPrediction == wineTrain$quality
+prediction_OLR <- table(wineTrain$correctPredictionOLR)
+
+# Create a data frame for the plot
+prediction_OLRdf <- data.frame(
+  prediction = c("Correct", "Incorrect"),
+  count = c(prediction_OLR[TRUE], prediction_OLR[FALSE])
+)
+
+# Calculate the percentage of correct predictions
+total_predictions <- sum(prediction_OLR)
+correct_percentage <- (prediction_OLR[TRUE] / total_predictions) * 100
+
+# Plot the stacked bar plot
+ggplot(prediction_OLRdf, aes(x = "Predictions", y = count, fill = prediction)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("Correct" = "darkred", "Incorrect" = "beige")) +
+  geom_text(aes(label = paste0(round(count / total_predictions * 100, 2), "%")), 
+            position = position_stack(vjust = 0.5), color = "black", fontface = "bold") +
+  labs(title = "Prediction Accuracy", x = "", y = "Count") +
+  theme_minimal() +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+
+pie(prediction_OLR, 
+    labels = paste0(names(prediction_OLR), " (", round(prediction_OLR / sum(prediction_OLR) * 100, 1), "%)"),
+    col = c("gray", "beige"),
+    main = "Prediction Accuracy")
+```
+
+
+```{r}
+# LOOCV for Multiple Linear Regression (MLR)
+
+# Initialize an empty vector to store the MAE for each fold
+mlrErrors <- c()
+
+# Loop over each row in the dataset (LOOCV)
+for(i in 1:nrow(wineTrain)) {
+  # Create the training and testing sets
+  train_set <- wineTrain[-i, ]  # Exclude the ith row for training
+  test_set <- wineTrain[i, , drop = FALSE]  # The ith row is the test set
+
+  model_ml <- lm(quality ~ alcohol * density * volatile.acidity * chlorides * citric.acid, data = train_set)
+  # Make a prediction for the excluded row
+  prediction_ml <- round(predict(model_ml, newdata = test_set))
+  
+  
+  # Calculate the absolute error for this iteration
+  errorMLR <- abs(prediction_ml - test_set$quality)
+  
+  # Store the error
+  mlrErrors <- c(mlrErrors, errorMLR)
+}
+
+# Calculate Mean Absolute Error (MAE) for MLR
+mlr_MAE <- mean(mlrErrors)
+print(paste("MAE:", mlr_MAE))
+```
+
+
+
+```{r}
+library(MASS)
+
+# Convert quality to a factor if it isn't already
+wineTrain$quality <- as.factor(wineTrain$quality)
+
+# Define a function to fit the model and calculate the prediction error
+calculate_error <- function(train_set, test_set) {
+  # Fit the ordinal logistic regression model
+  model_olr <- polr(quality ~ alcohol + density + volatile.acidity + chlorides + citric.acid, 
+                    data = train_set, method = "logistic")
+  
+  # Make a prediction for the excluded row (ith row)
+  prediction_olr <- predict(model_olr, newdata = test_set)
+  
+  # Convert the predicted factor to numeric for MAE calculation
+  prediction_olr_numeric <- as.numeric(prediction_olr)
+  
+  # Calculate the absolute error for this iteration
+  error_olr <- abs(prediction_olr_numeric - as.numeric(test_set$quality))
+  
+  return(error_olr)
+}
+```
+
+
+```{r}
+# Initialize a vector to store MAE values
+olr_errors <- numeric(nrow(wineTrain))
+
+# Perform LOOCV
+for(i in 1:nrow(wineTrain)) {
+  # Split the data into training and test sets (leave one out)
+  train_set <- wineTrain[-i, ]  # All data except the ith row for training
+  test_set <- wineTrain[i, , drop = FALSE]  # The ith row is the test set
+  
+  # Calculate error for this iteration using the custom function
+  olr_errors[i] <- calculate_error(train_set, test_set)
+}
+
+# Calculate the Mean Absolute Error (MAE) for LOOCV
+mean_olr_error <- mean(olr_errors)
+print(paste("MAE:", mean_olr_error))
+```
+

@@ -1,0 +1,290 @@
+---
+title: "Case Study"
+author: "Isiah Perine"
+date: "2024-12-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+```
+
+
+
+# LOADING IN THE DATA
+
+```{r}
+wine = read.csv("Wine Train.csv")
+wine
+```
+
+
+
+# CHECKING NA'S
+
+```{r}
+sum(is.na(wine))
+```
+
+```{r}
+# Example dataset
+data <- data.frame(old_name = 1:5, another_var = 6:10)
+
+# View original names
+names(data)
+
+# Rename a specific variable
+names(data)[names(data) == "old_name"] <- "new_name"
+
+# View updated names
+names(data)
+
+```
+
+
+# R SHINY APP FOR SCATTERPLOT/BOXPLOT OF EVERY VARIABLE AGAINST QUALITY
+
+```{r}
+library(shiny)
+library(ggplot2)
+
+data = read.csv("Wine Train.csv")
+names(data)[names(data) == "fixed.acidity"] = "FixedAcidity" 
+names(data)[names(data) == "volatile.acidity"] = "VolatileAcidity"
+names(data)[names(data) == "citric.acid"] = "CitricAcid"
+names(data)[names(data) == "residual.sugar"] = "ResidualSugar"
+names(data)[names(data) == "chlorides"] = "Chlorides"
+names(data)[names(data) == "free.sulfur.dioxide"] = "FreeSulfurDioxide"
+names(data)[names(data) == "total.sulfur.dioxide"] = "TotalSulfurDioxide"
+names(data)[names(data) == "density"] = "Density"
+names(data)[names(data) == "sulphates"] = "Sulphates"
+names(data)[names(data) == "alcohol"] = "Alcohol"
+names(data)[names(data) == "quality"] = "Quality"
+
+ui = fluidPage(
+    titlePanel("Scatterplot and Boxplot of Variables vs. Quality"),
+    sidebarLayout(
+        sidebarPanel(
+            selectInput("variable", 
+                        "Select a Variable:", 
+                        choices = setdiff(names(data), "Quality"), 
+                        selected = names(data)[1]),
+            radioButtons("plotType", 
+                         "Select Plot Type:", 
+                         choices = c("Scatterplot" = "scatter", "Boxplot" = "box"),
+                         inline = TRUE)
+        ),
+        mainPanel(
+            plotOutput("variablePlot")
+        )
+    )
+)
+
+server = function(input, output) {
+    output$variablePlot = renderPlot({
+        if (input$plotType == "scatter") {
+            ggplot(data, aes_string(x = "Quality", y = input$variable)) +
+                geom_point(alpha = 0.7, color = "blue") +
+                labs(title = paste("Scatterplot of", input$variable, "vs Quality"),
+                     x = "Quality",
+                     y = input$variable) +
+                theme_minimal()
+        } else {
+            ggplot(data, aes(x = factor(Quality), y = .data[[input$variable]], fill = factor(Quality))) +
+                geom_boxplot() +
+                labs(title = paste("Boxplot of", input$variable, "by Quality"),
+                     x = "Quality",
+                     y = input$variable) +
+                scale_fill_brewer(palette = "Set3") +
+                theme_minimal() +
+                theme(legend.position = "none")
+        }
+    })
+}
+
+shinyApp(ui = ui, server = server)
+```
+
+
+```{r}
+wine
+
+ggplot(wine, aes(x = factor(quality), y = volatile.acidity, fill = factor(quality))) +
+  geom_boxplot() +
+  labs(title = "Boxplot of Volatile Acidity by Quality",
+       x = "Quality",
+       y = "Volatile Acidity") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+```{r}
+library(shiny)
+library(ggplot2)
+
+data = read.csv("Wine Train.csv")
+
+ui = fluidPage(
+    titlePanel("Scatterplot and Boxplot of Variables vs. Quality"),
+    sidebarLayout(
+        sidebarPanel(
+            selectInput("variable", 
+                        "Select a Variable:", 
+                        choices = setdiff(names(data), "quality"), 
+                        selected = names(data)[1]),
+            radioButtons("plotType", 
+                         "Select Plot Type:", 
+                         choices = c("Scatterplot" = "scatter", "Boxplot" = "box"),
+                         inline = TRUE)
+        ),
+        mainPanel(
+            plotOutput("variablePlot")
+        )
+    )
+)
+
+server = function(input, output) {
+    output$variablePlot = renderPlot({
+        if (input$plotType == "scatter") {
+            ggplot(data, aes_string(x = "quality", y = input$variable)) +
+                geom_point(alpha = 0.7, color = "blue") +
+                labs(title = paste("Scatterplot of", input$variable, "vs Quality"),
+                     x = "Quality",
+                     y = input$variable) +
+                theme_minimal()
+        } else {
+            ggplot(data, aes(x = factor(quality), y = .data[[input$variable]], fill = factor(quality))) +
+                geom_boxplot() +
+                labs(title = paste("Boxplot of", input$variable, "by Quality"),
+                     x = "Quality",
+                     y = input$variable) +
+                scale_fill_brewer(palette = "Set3") +
+                theme_minimal()
+        }
+    })
+}
+
+shinyApp(ui = ui, server = server)
+```
+
+- As the quality of wine increases, the distribution of citirc.acid increases as well
+- After a quality level of 5, as the quality of wine increases, the distribution of density decreases
+- After a quality level of 5, as the quality of wine increases, the distribution of alcohol increases as well
+
+
+
+# CALCULATING ALL CORRELATIONS
+
+```{r}
+correlations = sapply(wine, function(x) {
+  if (is.numeric(x) && is.numeric(wine$quality)) {
+    cor(wine$quality, x, use = "complete.obs")
+  } else {
+    NA
+  }
+})
+
+correlation_results = data.frame(Variable = names(correlations), Correlation = correlations)
+
+# Sort the data by 'Correlation' in ascending order
+sorted_correlations = correlation_results[order(correlation_results$Correlation), ]
+sorted_correlations
+```
+
+- alcohol
+- density
+- volatile.acidity
+- chlorides
+- citric.acid
+
+
+
+# R SHINY APP FOR RELATIONSHIP OF EVERY VARIABLE AGAINST EACH OTHER COLORED BY GOOD/BAD QUALITY
+
+```{r}
+library(shiny)
+library(ggplot2)
+
+data = read.csv("Wine Train.csv")
+
+data$goodbad = ifelse(data$quality >= 7, "good", "bad")
+
+ui = fluidPage(
+    titlePanel("Dynamic Plot with Good/Bad Classification"),
+    sidebarLayout(
+        sidebarPanel(
+            selectInput("xvar", "Select X Variable:", choices = names(data)),
+            selectInput("yvar", "Select Y Variable:", choices = names(data), selected = names(data)[2])
+        ),
+        mainPanel(
+            plotOutput("dynamicPlot")
+        )
+    )
+)
+
+server = function(input, output) {
+    output$dynamicPlot = renderPlot({
+        ggplot(data, aes_string(x = input$xvar, y = input$yvar, color = "goodbad")) +
+            geom_point(alpha = 0.7) +
+            labs(title = paste("Plot of", input$xvar, "vs", input$yvar),
+                 x = input$xvar, y = input$yvar, color = "Good/Bad") +
+            theme_minimal()
+    })
+}
+
+shinyApp(ui = ui, server = server)
+```
+
+
+
+# R SHINY APP FOR BOXPLOT OF EVERY VARIABLE AGAINST GOOD/BAD QUALITY
+
+```{r}
+library(shiny)
+library(ggplot2)
+
+data = read.csv("Wine Train.csv")
+
+data$goodbad = ifelse(data$quality >= 7, "good", "bad")
+
+ui = fluidPage(
+    titlePanel("Boxplots for Variables by Good/Bad Classification"),
+    sidebarLayout(
+        sidebarPanel(
+            selectInput("variable", "Select a Variable for Boxplot:", choices = names(data))
+        ),
+        mainPanel(
+            plotOutput("boxplot")
+        )
+    )
+)
+
+server = function(input, output) {
+    output$boxplot = renderPlot({
+        ggplot(data, aes(x = goodbad, y = .data[[input$variable]], fill = goodbad)) +
+            geom_boxplot() +
+            labs(
+                title = paste("Boxplot of", input$variable, "by Good/Bad Classification"),
+                x = "Good/Bad Classification",
+                y = input$variable
+            ) +
+            scale_fill_manual(values = c("good" = "lightgreen", "bad" = "tomato")) +
+            theme_minimal()
+    })
+}
+
+shinyApp(ui = ui, server = server)
+```
+
+- The distribution of the alcohol is higher for the good quality wine compared to the bad quality wine. 
+
+
+
+```{r}
+
+```
+

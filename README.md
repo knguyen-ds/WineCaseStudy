@@ -5,7 +5,7 @@ Welcome to my Wine Analysis Case Study (DDS Project 2) repository! Here you shou
 
 - The **train** and **test datasets** used for analysis.
 - The **code** for each analysis question.
-- Our **RShiny app** for interactive analysis.
+- Our **RShiny app** for interactive analysis can be found by following this link: https://iperine.shinyapps.io/CaseStudy2/.
 - The **test set predictions**
 - Our **final analysis presentation** detailing the entire process.
 
